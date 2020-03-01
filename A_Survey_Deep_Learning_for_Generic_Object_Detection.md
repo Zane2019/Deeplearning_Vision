@@ -42,10 +42,10 @@
 - 两阶段检测框架：它包含一个区域提案（region proposal）的预处理过程，使得整个检测分为两个极端。
 - 单截断检测矿建或者无区域提案检测矿建。
   
-![avatar](img/survey_framework_milestone.png)
+![avatar](img/survey_framework_milestones.png)
 
-
-### RCNN
+### Two Stage Framworks
+#### RCNN
 
 
 RCNN基本步骤：
@@ -63,28 +63,81 @@ RCNN基本步骤：
 - 由于CNN特征是从每张图片每个候选区域单独提取出来的，使得SVM和bounding box regression的训练是非常消耗空间和时间。
 - 同样，由于CNN特征是从每个测试图片的目标区域提取出来的，测试是很慢的
   
-### SPPNet
+#### SPPNet
 在测试阶段CNＮ特征的提取是制约RCCN检测的主要瓶颈，因为它需要从一张图中数以千计的候选区域中提取CNN的特征。He等人注意到这个问题，酒吧传统的空间金字塔池化加入了CNN架构，去获取固定尺寸的feature map。SPPNet的引入，显著加速了RCNN且没有牺牲任何检测质量。然后SPPnet显著加速了RCNN的评估，却没有带来客观的训练加速。此外，SPPnet中的微调无法在SPP层之前更新卷积层，这限制了非常深层网络的准确性。
 
-### Fast RCNN
+#### Fast RCNN
 
-FastRCNN提高了检测速度和质量。FastRCNN使能了end-to-end的检测器训练（忽略掉了候选区域生成的过程）。它使用multitask loss同时学习softmax分类器和class-specific bounding box regression.而不是像RCNN/SPPNet那样分别训练softmax classifier,SVM,BBR。Faste RCNN采用了跨候选区域的卷积计算，并且在最后一个卷积层和第一个全连接层之间添加了一个感兴趣区域池化层（RoI,Region of Interest）去对每个候选区域（实质上就是RoI）提取固定长度的特征。本质上，RoI池化是使用特征级别的扭曲（warping）去近似图像级别的扭曲。ROI池化层之后的特征是馈入到全连接层序列，最终进入两个sibling输出层：对目标类型的预测的softmax probabilities和class-specific bounding box regression offset去优化后proposal.
+FastRCNN提高了检测速度和质量。FastRCNN使能了end-to-end的检测器训练（忽略掉了候选区域生成的过程）。它使用multitask loss同时学习softmax分类器和class-specific bounding box regression.而不是像RCNN/SPPNet那样分别训练softmax classifier,SVM,BBR。见Fig13. Fast RCNN采用了跨候选区域的卷积计算，并且在最后一个卷积层和第一个全连接层之间添加了一个感兴趣区域池化层（RoI,Region of Interest）去对每个候选区域（实质上就是RoI）提取固定长度的特征。本质上，RoI池化是使用特征级别的扭曲（warping）去近似图像级别的扭曲。ROI池化层之后的特征是馈入到全连接层序列，最终进入两个sibling输出层：对目标类型的预测的softmax probabilities和class-specific bounding box regression offset去优化后proposal.
 与RCNN和SPPNet相比，FastRCNN显著提高了效率--训练快3倍，测试快10倍。
 总结：Fast RCNN具有吸引人的优势，具有更高的检测质量，单阶段训练过程可更新所有网络层，并且无需存储特征缓存
-### Faster RCNN
+#### Faster RCNN
 
 虽然Fast RCNN 显著加速了检测过程，但它仍然依赖于外部候选区域。 候选区域的计算是Fast RCNN的瓶颈。
-在当时发现，CNN在卷积层有杰出的定位目标的能力，这个能力在全连接层是虚弱的。因此selective search能使用CNN去替代产生候选区域。Faster RCNN框架提出了一个高效且准确的候选区域网络（RPN,Region Proposal Net）.在Faster RCNN中，RPN和Fast RCNN共享大量卷积层。来自共享卷积层最后的特征被用于两个分支，候选区域提出和区域分割。
+在当时发现，CNN在卷积层有杰出的定位目标的能力，这个能力在全连接层是虚弱的。因此selective search能使用CNN去替代产生候选区域。Faster RCNN框架提出了一个高效且准确的候选区域网络（RPN,Region Proposal Net）,见Fig13.在Faster RCNN中，RPN和Fast RCNN共享大量卷积层。来自共享卷积层最后的特征被用于两个分支，候选区域提出和区域分割。
 
 > RPN首先在每个卷积特征图位置上初始化k个n*n的不同尺度和比例的参考boxes(即 我们anchor)，每个n*n的anchor映射到一个低维向量（例如256维的ZF，和512维的VGG）,然后馈入两个sibling全连接层--一个是目标类型分类另一个box回归。 与Fast RCNN不同，在RPN中用于回归的特征具有相同的尺寸。 
 > RPN，实际上，是一种全卷积网络，Faster RCNN因此是一种没有使用手工特征的基于纯CNN的框架
 
-## RFCN (Region based Fully Convolutional NetWorks)
+![avatar](img/survey_leading_framework.PNG)
 
-RFCN仅在RoI子网中与Faster RCNN不同
+#### RFCN (Region based Fully Convolutional NetWorks)
+
+虽然Faster RCNN比Fast RCNN快一个数量级，但是区域子网仍然需要按每个RoI应用（每个图像数百个RoI）。因此Dai等人提出RFCN检测器，它是一个完全的卷积（没有隐含的全连接层），几乎所有的计算都在整张图像上共享。如图13所示，RFCN与Faster RCNN唯一的不同在于ROI子网，在Faster RCNN中，ROI池化层之后的计算不能共享，因此，Dai等人提出全部使用卷积层去构造一个共享的ROI子网，在预测之前，提取最后一层卷积特征的RoI crops。然鹅，他们发现这种简单的设计检测准确率相当低，推测到更深的卷积层对类别的语义更敏感，而对平移不够敏感，然而目标检测需要与平移变化相关的定位表示。基于这个观察，代等人通过使用一组专门的卷积层作为FCN的输出构建了一组位置敏感的得分图，在上面添加了与标准RoI池化层不同的位置敏感的RoI池化层。
 
 
-## Mask RCNN
+#### Mask RCNN
 
-## Light Head RCNN
+He 等人遵循概念简单、效率和灵活性的精神，提出了Mask RCNN，通过扩展更快的RCNN来处理像素级的目标实例分割。Mask RCNN采用相同的两级管道，相同的一级(RPN)。在第二阶段，在预测类和框偏移量的同时，Mask RCNN添加了一个分支，为每个RoI输出一个二进制掩码。新的分支是一个完全卷积网络(FCN)，位于CNN专题地图之上。为了避免原始RoI池层(RoIPool)造成的错位，提出了一个RoIAlign层来保持像素级空间对应。Mask RCNN采用骨干网络ResNeXt101-FPN，实现了COCO目标实例分割和边界盒目标检测的顶级结果。它很容易训练，概括得很好，并且只给更快的RCNN增加了很小的开销，运行速度为5 FPS
+
+#### Chained Cascade Network and Cascade RCNN
+级联的本质是通过使用多级分类器来学习更多的判别式分类器，以便早期阶段丢弃大量的简单否定样本，以便后期阶段可以专注于处理更困难的示例。可以将两级对象检测视为级联，第一级检测器除去大量背景，第二级对其余区域进行分类。
+
+#### Light Head RCNN
+
+为了更进一步加速RFCN，旷视的黎泽明等人提出Light Head RCNN，使检测网络的头部尽可能轻，以减少RoI区域计算
+
+
+### One Stage Frameworks
+
+统一流水线是指直接从全图上预测类概率和边界框偏移的架构，不涉及候选区域生成或后分类。该方法简单而优雅，因为它完全消除了候选区域生成和后续的像素或特征重采样阶段，将所有计算封装在单个网络中。因为是单个网络，所以能直接端到端的优化。
+
+#### DetectorNet
+DetectorNet设计的目标检测是一个目标包围盒掩码的回归问题。他们使用AlexNet，用回归层代替最终的softmax分类器层。给定一个图像窗口，他们使用一个网络来预测粗网格上的前景像素，以及四个额外的网络来预测目标的上、下、左、右半边。然后分组进程将预测掩码转换为检测到的边框。每个目标类型和掩码类型都需要训练一个网络。它不会扩展到多个类。DetectorNet必须获取图像的许多作物，并为每个作物的每个部分运行多个网络。
+
+#### OverFeat
+
+一种基于完全卷积深度网络的现代单级目标检测器。它是最成功的目标检测框架之一，赢得了ILSVRC2013本地化竞赛.OverFeat通过CNN网络的单个前向传播以多尺度滑动窗口的方式执行目标检测，该CNN网络仅由卷积层组成（除最终分类/回归层）。通过这种方式，它们很自然的共享了重叠区域的计算。OverFeat生成一个特征向量网格，每个特征向量代表输入图像中稍微不同的上下文视角位置，因此可以预测目标的存在。一旦识别出目标，则使用相同的特征来预测单个边界框回归。速度优势源于使用完全卷积网络共享重叠窗口之间的卷积计算。
+
+![avatar](img/survey_OverFeat.PNG)
+
+#### YOLO
+
+Redmon等人提出的YOLO是统一的框架，将目标检测问题转化为回归问题。如图13所示.由于候选区域生成阶段完全取消，YOLO直接使用一小部分候选区域预测探测。与基于区域的方法(如Faster RCNN)不同，YOLO使用全局图像的特征来预测检测结果.特别是，YOLO将图像划分为S - S网格。每个网格预测C类概率、B包围框位置和这些框的信任得分。这些预测被编码为一个S (5B +C)张量。通过完全抛弃区域提案生成步骤，YOLO的设计速度很快，实时运行45 FPS，快速版本，即快速YOLO，运行155 FPS。因为预测时YOLO看到的是整张图，它隐含地编码关于目标类的上下文信息，因此不太可能把背景预测为正例。YOLO有可能对小目标预测失败，是因为网格划分比较粗糙，并且每个网格内只能包含一个目标。
+
+#### YOLOv2 and YOLO9000
+
+YOLOv2的改进点有，用改良的DarkNet19替换自定义的GoogLeNet，利用了当时一系列策略，比如加上BN，去掉全连接层，使用kmeans学习到的anchor box，以及多尺度训练。
+
+YOLO9000能实时检测超过9000个目标的类别，提出了一种联合优化方法，利用WordTree在ImageNet和COCO上同步训练，将来自多个数据源的数据组合起来。
+
+#### SSD (Single Shot Detector)
+
+其速度快于YOLO,准确率和Faster RCNN差不多。SSD结合了Faster RCNN中的RPN，YOLO以及多尺度卷积特征的思想。跟YOLO一样，SSD预测了固定数量的边界框和这些框中存在目标类实例的得分，然后是NMS步骤，以生成最终检测。
+
+
+SSD的网络是完全卷积的，早期层基于标准架构，如VGG。然后在其之后添加几个尺寸逐渐减小的辅助CONV层。低分辨率的最后一层的信息可能空间上太粗糙而不能精确定位，SSD使用高分辨率的浅层来预测小目标。
+
+对于不同大小的目标，SSD通过多个卷积特征图的来执行多尺度检测，每个特征图预测类别分数及边界框合适的偏移。
+
+#### CornerNet
+
+Law等人质疑了anchor box在SoA目标检测框架中所承担的角色。他认为anchor box的使用，特别是在单阶段检测中，存在缺陷，如造成正样本和负样本之间的巨大不平衡，降低了训练速度并引入了额外的超参数。
+Law提出将边界框对象的检测公式化为检测左上角和右下角关键点对。在Cornet Net，骨干网由两个堆叠的沙漏网络组成，采用简单的拐角池方法来更好地定位拐角。在MS COCO中，corner net达到了42.1%的AP,超越了之前所有的单阶段检测器，然后在Titan X GPU平均推理效率大约4 FPS，显著低于SSD和YOLO.
+CornerNet会生成错误的边界框，因为要确定应将哪些关键点对分组到同一对象中是一项挑战。
+为了进一步完善Cornernet，Duanet等人提议CenterNet通过在提案中心引入一个额外的关键点来将每个对象作为关键点的三元组来检测，将MS COCO AP提升到47：0％，但推理速度比CornerNet慢。
+
+
+
+
 
