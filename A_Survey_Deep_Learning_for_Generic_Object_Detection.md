@@ -141,3 +141,47 @@ CornerNet会生成错误的边界框，因为要确定应将哪些关键点对�
 
 
 
+
+## 目标表示
+
+上一节中综述的主要框架(RCNN， Fast RCNN ， Faster RCNN ， YOLO ， SSD)一直在提高检测的准确性和速度。人们普遍认为CNN的表现起着至关重要的作用，而CNN架构是探测器的引擎。因此，最近在检测精度方面的大多数改进都是通过研究新网络的发展来实现的。因此我们首先回顾流行CNN架构中使用通用目标检测,其次是审查表示努力致力于改善目标的特性,如发展不变的特性来适应几何目标规模的变化,姿势,观点,一部分变形和执行多尺度分析,提高目标检测在一个广泛的鳞片。
+
+### 流行的CNN架构
+
+架构演进的趋势是网络越来越深.见下表
+
+![avatar](img/survey_DCNN.png)
+
+### Methods For Improving Object Representation
+
+物体在图像中的尺寸是未知的，图片中的不同物体尺寸也可能是不同的，而DCNN越深层的感受野越大，因此只在某一层上进行预测显然是难以达到最优的，一个自然的想法是利用不同层提取到的信息进行预测，称之为multiscale object detection，可分成3类：
+
+    1 使用多个CNN层的组合特征进行检测
+
+    2 在多个CNN层上直接检测
+
+    3 结合上述两种方法
+
+- 使用多个CNN层的组合特征进行检测
+代表方法有Hypercolumns，HyperNet，ION。这种特征组合通常通过跳跃连接来完成.
+利用CNN多个层的联合特征进行检测，是在进行预测之前，从多个层结合特征。具有代表性的方法包括Hypercolumns、HyperNet和ION。这种特性的组合通常是通过跳跃连接来完成的，这是一种经典的神经网络思想，它跳过网络中的某些层，将较早层的输出作为后一层的输入，这种体系结构最近在语义分割方面变得流行。如图所示，ION使用跳跃池从多层中提取RoI特征，然后利用组合特征对选择性搜索和边框生成的目标提案进行分类。HyperNet,如图所示，采用类似的思路，融合深、中、浅层特征，通过端到端联合训练策略生成目标方案并预测目标。这种方法只提取每幅图像中的100个候选区域。组合特性更具有描述性，更有利于定位和分类，但增加了计算复杂度。
+
+![avatar](img/survey_combine_feature.png)
+
+- 在多个CNN层上直接检测
+
+FCN通过平均分割概率结合多个层的从粗糙到精细的预测。SSD，MSCNN，RBFNet，DSOD结合多个特征图的预测来处理各种大小的目标。SSD将不同比例的默认框展开到CNN中的多个层，并强制每个层专注于预测特定比例的目标
+
+- 结合上述两种方法
+
+从具有较大感受野的后面的层检测大目标，从具有较小感受野的前面的层检测小目标，感觉是很自然的，然而，简单地检测来自前面层的目标可能导致效果很差，因为前面的层具有较少的语义信息。因此，为了结合两者的优点，最近的一些工作提出了在多个层上检测目标，并通过组合来自不同层的特征去获取每个检测层的特征。代表方法有SharpMask，DSSD(Deconvolutional Single Shot Detector)，FPN(Feature Pyramid Network)，TDM(Top Down Modulation)，RON(Reverse connection with Objectness prior Network)，ZIP，STDN(Scale Transfer Detection Network)，RefineDet，StairNet，如表7和图11，图12所示。
+
+![avatar](img/survey_table7.png)
+![avatar](img/survey_table7_.png)
+
+如下图所示，这些方法都有高度相似的检测架构，具体来讲，在自下而上的传递之后，最终的高级语义特征由自上而下的网络回传，以便在横向处理后与来自中间层的自下而上的特征相结合
+
+![avatar](img/survey_17a.png)
+![avatar](img/survey_17b.png)
+![avatar](img/survey_17c.png)
+![avatar](img/survey_17d.png)
