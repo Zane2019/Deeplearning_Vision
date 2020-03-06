@@ -1,5 +1,6 @@
 # Faster CNN
-
+> 转自https://zhuanlan.zhihu.com/p/31426458，部分删减
+> 
 RCNN系列的神经网络在图像检测和分类领域具有高效率，并且其mAP（mean Average Precision）分数比之前的技术更高.
 
 经过RCNN,Fast RCNN的几点，经过R-CNN和Fast RCNN的积淀，Ross B. Girshick在2016年提出了新的Faster RCNN，在结构上，Faster RCNN已经将特征抽取(feature extraction)，proposal提取，bounding box regression(rect refine)，classification都整合在了一个网络中，使得综合性能有较大提高，在检测速度方面尤为明显。
@@ -110,3 +111,81 @@ $$
 $$
 d_*(A)=w^T_x*\Phi(A)
 $$
+
+其中Φ(A)是对应anchor的feature map组成的特征向量，w是需要学习的参数，d(A)是得到的预测值（*表示 x，y，w，h，也就是每一个变换对应一个上述目标函数）。为了让预测值(tx, ty, tw, th)与真实值最小，得到损失函数：
+$$Loss=\sum_i^N(t_*^i-\hat w\cdot \Phi(A^i))^2$$
+函数优化目标为：
+$$w_*=\argmin_{\hat{w_*}}\sum^N_i(t_*^i-\hat w_*^T\cdot\Phi(A^i))^2+\lambda||\hat{ w_*}||^2$$
+
+### 对Proposals进行bounding box regression
+
+
+![avatar](/img/Faster_RCNN_rpb_bounding_box_regression.png)
+可以看到其num_output=36，即经过该卷积输出图像为WxHx36，在caffe blob存储为[1, 36, H, W]。与上文中fg/bg anchors存储为[1, 18, H, W]类似，这里相当于feature maps每个点都有9个anchors，每个anchors又都有4个用于回归的[dx(A)，dy(A)，dw(A)，dh(A)]变换量。利用上面的的计算公式即可从foreground anchors回归出proposals。
+
+### Proposal Layer
+Proposal Layer负责综合所有[dx(A)，dy(A)，dw(A)，dh(A)]变换量和foreground anchors，计算出精准的proposal，送入后续RoI Pooling Layer。
+
+Proposal Layer有3个输入：fg/bg anchors分类器结果rpn_cls_prob_reshape，对应的bbox reg的[dx(A)，dy(A)，dw(A)，dh(A)]变换量rpn_bbox_pred，以及im_info；另外还有参数feat_stride=16，这和图4是对应的。
+
+首先解释im_info。对于一副任意大小PxQ图像，传入Faster RCNN前首先reshape到固定MxN，im_info=[M, N, scale_factor]则保存了此次缩放的所有信息。然后经过Conv Layers，经过4次pooling变为WxH=(M/16)x(N/16)大小，其中feature_stride=16则保存了该信息。所有这些数值都是为了将proposal映射回原图而设置的，如图12，毕竟检测就是为了在原图上画一个框而已。
+
+> Proposal Layer forward（caffe layer的前传函数）按照以下顺序依次处理：
+再次生成anchors，并对所有的anchors做bbox reg位置回归（注意这里的anchors生成顺序和之前是即完全一致的）
+按照输入的foreground softmax scores由大到小排序anchors，提取前pre_nms_topN(e.g. 6000)个anchors。即提取修正位置后的foreground anchors
+利用feat_stride和im_info将anchors映射回原图，判断fg anchors是否大范围超过边界，剔除严重超出边界fg anchors。
+进行nms（nonmaximum suppression，非极大值抑制）
+再次按照nms后的foreground softmax scores由大到小排序fg anchors，提取前post_nms_topN(e.g. 300)结果作为proposal输出。
+之后输出proposal=[x1, y1, x2, y2]，注意，由于在第三步中将anchors映射回原图判断是否超出边界，所以这里输出的proposal是对应MxN输入图像尺度的，这点在后续网络中有用。另外我认为，严格意义上的检测应该到此就结束了，后续部分应该属于识别了~
+
+RPN网络结构就介绍到这里，总结起来就是：
+**生成anchors -> softmax分类器提取fg anchors -> bbox reg回归fg anchors -> Proposal Layer生成proposals**
+
+## ROI pooling 
+
+而RoI Pooling层则负责收集proposal，并计算出proposal feature maps，送入后续网络。从图3中可以看到Rol pooling层有2个输入：
+
+原始的feature maps
+RPN输出的proposal boxes（大小各不相同）
+
+为什么需要ROI Pooling?
+对于传统的CNN（如AlexNet，VGG），当网络训练好后输入的图像尺寸必须是固定值，同时网络输出也是固定大小的vector or matrix。如果输入图像大小不定，这个问题就变得比较麻烦。
+回忆RPN网络生成的proposals的方法：对foreground anchors进行bound box regression，那么这样获得的proposals也是大小形状各不相同，即也存在上述问题。所以Faster RCNN中提出了RoI Pooling解决这个问题（需要说明，RoI Pooling其实是从SPP发展而来）
+
+### ROI Pooling 原理
+
+分析之前先来看看RoI Pooling Layer的caffe prototxt的定义：
+```cpp
+layer {  
+  name: "roi_pool5"  
+  type: "ROIPooling"  
+  bottom: "conv5_3"  
+  bottom: "rois"  
+  top: "pool5"  
+  roi_pooling_param {  
+    pooled_w: 7  
+    pooled_h: 7  
+    spatial_scale: 0.0625 # 1/16  
+  }  
+}  
+```
+其中有新参数pooled_w=pooled_h=7，另外一个参数spatial_scale=1/16。
+
+RoI Pooling layer forward过程：在之前有明确提到：proposal=[x1, y1, x2, y2]是对应MxN尺度的，所以首先使用spatial_scale参数将其映射回MxN大小的feature maps尺度（这里来回多次映射，是有点绕）；之后将每个proposal水平和竖直都分为7份，对每一份都进行max pooling处理。这样处理后，即使大小不同的proposal，输出结果都是7x7大小，实现了fixed-length output。
+![avatar](/img/Faster_RCNN_proposal.png)
+
+## Classfication
+Classification部分利用已经获得的proposal feature maps，通过full connect层与softmax计算每个proposal具体属于那个类别（如人，车，电视等），输出cls_prob概率向量；同时再次利用bounding box regression获得每个proposal的位置偏移量bbox_pred，用于回归更加精确的目标检测框。Classification部分网络结构如图
+![avatar](/img/Faster_RCNN_classfication.png)
+
+从PoI Pooling获取到7x7=49大小的proposal feature maps后，送入后续网络，可以看到做了如下2件事：
+
+通过全连接和softmax对proposals进行分类，这实际上已经是识别的范畴了
+再次对proposals进行bounding box regression，获取更高精度的rect box
+
+
+## QA
+
+1. **为何有ROI Pooling还要把输入图片resize到固定大小的MxN?**
+ 
+ 由于引入ROI Pooling，从原理上说Faster R-CNN确实能够检测任意大小的图片。但是由于在训练的时候需要使用大batch训练网络，而不同大小输入拼batch在实现的时候代码较为复杂，而且当时以Caffe为代表的第一代深度学习框架也不如Tensorflow和PyTorch灵活，所以作者选择了把输入图片resize到固定大小的800x600。这应该算是历史遗留问题。
