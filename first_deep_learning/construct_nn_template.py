@@ -86,7 +86,7 @@ def train(args, model, device, train_loader, optimizer, epoch):  # 还可以添�
 ################## 3 定义测试函数 ######################
 #######################################################
 def test(args, model, device, test_loader):
-    model.eval()  # 　必备！！！！！将模型设置为评估模式
+    model.eval()  # 　必备！！！！！将模型设置
     test_loss=0
     correct=0
     with torch.no_grad():  # 禁用梯度计算
